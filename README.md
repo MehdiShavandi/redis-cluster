@@ -197,4 +197,4 @@ backend redis-primary
 2- docker network create web_net  
 3- docker compose up -d
 
-![Architecture diagram for repository server](images/Capture.jpg)
+![Architecture diagram for repository server](images/Capture.JPG)
