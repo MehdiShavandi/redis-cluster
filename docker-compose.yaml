@@ -1,0 +1,110 @@
+version: '2'
+
+networks:
+  web_net:
+    external: true
+  app_net:
+    external: false
+
+services:
+  redis:
+    image: 'bitnami/redis:latest'
+    environment:
+      - REDIS_REPLICATION_MODE=master 
+      - REDIS_PASSWORD=str0ng_passw0rd 
+    networks:
+      - app_net
+
+  redis-slave-1:
+    image: 'bitnami/redis:latest'
+    environment:
+      - REDIS_REPLICATION_MODE=slave 
+      - REDIS_MASTER_HOST=redis 
+      - REDIS_MASTER_PASSWORD=str0ng_passw0rd 
+      - REDIS_PASSWORD=str0ng_passw0rd
+    depends_on:
+      - redis
+    networks:
+      - app_net
+
+  redis-slave-2:
+    image: 'bitnami/redis:latest'
+    environment:
+      - REDIS_REPLICATION_MODE=slave 
+      - REDIS_MASTER_HOST=redis 
+      - REDIS_MASTER_PASSWORD=str0ng_passw0rd 
+      - REDIS_PASSWORD=str0ng_passw0rd
+    depends_on:
+      - redis
+      - redis-slave-1
+    networks:
+      - app_net
+
+  redis-sentinel-1:
+    image: 'bitnami/redis-sentinel:latest'
+    environment:
+      - REDIS_MASTER_PASSWORD=str0ng_passw0rd 
+    depends_on:
+      - redis
+      - redis-slave-1
+      - redis-slave-2
+    networks:
+      - app_net
+  
+  redis-sentinel-2:
+    image: 'bitnami/redis-sentinel:latest'
+    environment:
+      - REDIS_MASTER_PASSWORD=str0ng_passw0rd 
+    depends_on:
+      - redis
+      - redis-slave-1
+      - redis-slave-2
+    networks:
+      - app_net
+      
+  redis-sentinel-3:
+    image: 'bitnami/redis-sentinel:latest'
+    environment:
+      - REDIS_MASTER_PASSWORD=str0ng_passw0rd
+    depends_on:
+      - redis
+      - redis-slave-1
+      - redis-slave-2
+    networks:
+      - app_net
+      
+      
+  haproxy:
+    image: haproxy:latest
+    container_name: haproxy
+    restart: always
+    #ports:
+      #- '3000:3000'
+      #- '${REDIS_PRIV_IP}:6379:6379'
+    depends_on:
+      - redis
+      - redis-slave-1
+      - redis-slave-2
+      - redis-sentinel-1
+      - redis-sentinel-2
+      - redis-sentinel-3
+    networks:
+      - web_net
+      - app_net
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
+
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=web_net
+      - traefik.http.routers.redis.entrypoints=http
+      - traefik.http.routers.redis.rule=Host(`${REDISSUB}.${domain}`)
+      - traefik.http.routers.redis.middlewares=https-redirect
+      - traefik.http.middlewares.https-redirect.redirectscheme.scheme=https
+      - traefik.http.routers.redis-secure.entrypoints=https
+      - traefik.http.routers.redis-secure.rule=Host(`${REDISSUB}.${domain}`)
+      - traefik.http.routers.redis-secure.tls=true
+      - traefik.http.routers.redis-secure.tls.options=default
+      - traefik.http.routers.redis-secure.middlewares=web-auth
+      - traefik.http.routers.redis-secure.tls.certresolver=mycert
+      - traefik.http.services.redis.loadbalancer.server.port=3000
